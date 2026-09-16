@@ -196,7 +196,7 @@ Add a `touchpadAuto` section to `~/.config/omarchy/shell.json`:
 ## Uninstall
 
 ```bash
-omarchy plugin remove alebak.touchpad-auto
+omarchy plugin remove io.github.alebak.touchpad-auto
 ```
 
 ## Status

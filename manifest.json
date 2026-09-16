@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "id": "alebak.touchpad-auto",
+  "id": "io.github.alebak.touchpad-auto",
   "name": "Touchpad Auto",
   "version": "0.1.0",
   "author": "Alejandro Arroyave",

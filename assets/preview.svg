@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#15151f"/>
+      <stop offset="1" stop-color="#0e0e16"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1280" height="720" fill="url(#bg)"/>
+
+  <!-- title, centred with the rest -->
+  <text x="640" y="98" text-anchor="middle"
+        font-family="JetBrains Mono, DejaVu Sans Mono, monospace"
+        font-size="42" fill="#eaeaf6">Touchpad Auto</text>
+  <text x="640" y="140" text-anchor="middle"
+        font-family="JetBrains Mono, DejaVu Sans Mono, monospace"
+        font-size="22" fill="#7a7a96">plug in a mouse, the touchpad under your palms goes quiet</text>
+
+  <!-- external mouse, active: the cause. vertically centred on the laptop -->
+  <g transform="translate(284,271)">
+    <rect x="0" y="0" width="104" height="162" rx="52" fill="none" stroke="#7d8cff" stroke-width="4"/>
+    <line x1="52" y1="16" x2="52" y2="60" stroke="#7d8cff" stroke-width="4" stroke-linecap="round"/>
+    <text x="52" y="212" text-anchor="middle"
+          font-family="JetBrains Mono, DejaVu Sans Mono, monospace"
+          font-size="19" fill="#7d8cff">connected</text>
+  </g>
+
+  <!-- arrow: cause to effect -->
+  <g stroke="#3d3d57" stroke-width="4" fill="none" stroke-linecap="round">
+    <line x1="448" y1="352" x2="548" y2="352"/>
+    <polyline points="528,336 548,352 528,368"/>
+  </g>
+
+  <!-- laptop: the effect -->
+  <g transform="translate(608,190)">
+    <rect x="44" y="0" width="300" height="186" rx="10" fill="none" stroke="#33334a" stroke-width="3"/>
+    <rect x="60" y="16" width="268" height="154" rx="5" fill="#1b1b28"/>
+    <rect x="0" y="198" width="388" height="126" rx="9" fill="#161622" stroke="#33334a" stroke-width="3"/>
+    <g fill="#26263a">
+      <rect x="22" y="214" width="344" height="13" rx="3"/>
+      <rect x="22" y="235" width="344" height="13" rx="3"/>
+    </g>
+    <!-- built-in touchpad, struck through -->
+    <rect x="137" y="264" width="114" height="42" rx="6" fill="none" stroke="#4a4a63" stroke-width="3"/>
+    <line x1="145" y1="300" x2="243" y2="270" stroke="#c84b5f" stroke-width="5" stroke-linecap="round"/>
+    <text x="194" y="356" text-anchor="middle"
+          font-family="JetBrains Mono, DejaVu Sans Mono, monospace"
+          font-size="19" fill="#9a6070">built-in touchpad off</text>
+  </g>
+
+  <!-- osd card, centred, clear of everything above -->
+  <g transform="translate(360,578)">
+    <rect x="0" y="0" width="560" height="96" rx="6" fill="#12121c" stroke="#5a6ad6" stroke-width="3"/>
+    <g transform="translate(38,26)">
+      <rect x="0" y="0" width="48" height="40" rx="6" fill="none" stroke="#dcdcf0" stroke-width="3.5"/>
+      <line x1="0" y1="27" x2="48" y2="27" stroke="#dcdcf0" stroke-width="3.5"/>
+      <line x1="24" y1="27" x2="24" y2="40" stroke="#dcdcf0" stroke-width="3.5"/>
+    </g>
+    <text x="118" y="59" font-family="JetBrains Mono, DejaVu Sans Mono, monospace"
+          font-size="29" fill="#dcdcf0">Touchpad disabled</text>
+  </g>
+</svg>

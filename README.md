@@ -127,24 +127,47 @@ the kernel reports the change. Nothing is stuck.
 
 ## Override
 
-There's no notification button for this anymore -- reach it through
-`omarchy-shell`'s IPC instead. To bind it, add a line like this to
-`~/.config/hypr/bindings.lua`:
+Telling the plugin to back off is reached through `omarchy-shell`'s IPC, so it
+can be bound to whatever key you like. The plugin does not claim a shortcut of
+its own: a plugin that assigns itself keys is a plugin that silently steals one
+of yours.
+
+First check the combination is free on your setup:
+
+```bash
+omarchy menu keybindings --print | grep -i "SUPER SHIFT + T"
+```
+
+If that prints nothing, the combination is available. Then add the binding --
+this appends it only once, so it is safe to run again:
+
+```bash
+grep -q "touchpad-auto override" ~/.config/hypr/bindings.lua || cat >> ~/.config/hypr/bindings.lua <<'EOF'
+
+-- Touchpad Auto: leave the touchpad on while a pointer stays connected
+o.bind("SUPER + SHIFT + T", "Touchpad override", "omarchy-shell touchpad-auto override")
+EOF
+```
+
+Hyprland reloads on save, so the binding is live immediately.
+
+`SUPER + SHIFT + T` is only a suggestion. To use a different key, edit the line
+in `~/.config/hypr/bindings.lua` -- and if the combination you want is already
+taken, call `hl.unbind` for it before your `o.bind`, as Omarchy's own bindings
+do:
 
 ```lua
+hl.unbind("SUPER + SHIFT + T")
 o.bind("SUPER + SHIFT + T", "Touchpad override", "omarchy-shell touchpad-auto override")
 ```
 
-`SUPER + SHIFT + T` is only a suggestion -- check it's free on your setup
-before binding it.
-
-Running the override while a pointer is connected tells the plugin to back
-off and leave the touchpad enabled, even though an external pointer is still
+Running the override while a pointer is connected tells the plugin to back off
+and leave the touchpad enabled, even though an external pointer is still
 plugged in. It resets automatically the moment every external pointer is
 disconnected, so the next connection is treated as fresh.
 
-To check the plugin's current state (including whether the override is
-active) at any time, run:
+To check the plugin's current state at any time, including whether the override
+is active:
 
 ```bash
 omarchy-shell touchpad-auto status

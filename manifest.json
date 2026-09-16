@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "id": "alebak.touchpad-auto",
+  "name": "Touchpad Auto",
+  "version": "0.1.0",
+  "author": "Alejandro Arroyave",
+  "description": "Disables the built-in touchpad automatically when an external mouse or trackpad is connected, and re-enables it when the last one disconnects.",
+  "kinds": [
+    "service"
+  ],
+  "keepLoaded": true,
+  "entryPoints": {
+    "service": "Service.qml"
+  }
+}

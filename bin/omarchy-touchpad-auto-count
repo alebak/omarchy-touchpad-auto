@@ -1,0 +1,146 @@
+#!/bin/bash
+
+# omarchy-touchpad-auto-count
+#
+# Prints a single integer: the number of currently connected *external
+# pointing devices* -- devices that should trigger disabling the built-in
+# touchpad.
+#
+# This is the sole source of truth for the touchpad-auto plugin. It is
+# intentionally NOT driven by `udevadm monitor` events directly -- a `remove`
+# event carries incomplete udev properties (the device is already gone by the
+# time it is reported), so parsing it leads to phantom state. Instead this
+# script re-enumerates every input device from scratch on every invocation,
+# and the caller (Service.qml) treats udev monitor lines only as a "something
+# changed, go recount" signal.
+#
+# Classification
+# --------------
+# A device counts as an external pointer when udev reports EITHER of:
+#
+#   1. ID_INPUT_MOUSE=1 and NEITHER ID_INPUT_POINTINGSTICK=1 NOR
+#      ID_INPUT_TOUCHPAD=1 -- a plain external mouse.
+#
+#   2. ID_INPUT_TOUCHPAD=1 and ID_INPUT_TOUCHPAD_INTEGRATION=external -- an
+#      external trackpad (e.g. an Apple Magic Trackpad over Bluetooth). These
+#      advertise no ID_INPUT_MOUSE at all, so they are invisible to rule 1 and
+#      need this separate rule.
+#
+# Never counted, regardless of anything else:
+#
+#   - Any device with ID_INPUT_POINTINGSTICK=1. On ThinkPads the TrackPoint
+#     also advertises ID_INPUT_MOUSE=1 (it behaves like a mouse), so without
+#     this exclusion it would disable the touchpad on every boot.
+#
+#   - Any touchpad whose ID_INPUT_TOUCHPAD_INTEGRATION is "internal", or
+#     ABSENT. The property comes from /usr/lib/udev/rules.d/65-integration.rules,
+#     which classifies by physical integration rather than connection type
+#     and can leave the property unset entirely (unset ID_BUS, or a USB
+#     device matching none of that file's "removable" branches). A touchpad
+#     we cannot positively classify as external is treated the same as an
+#     internal one: NOT counted. Acting on the wrong device (e.g. disabling
+#     the one touchpad you have because we mistook it for "external") is
+#     worse than doing nothing, so absence of the property fails safe rather
+#     than being read as "external".
+#
+# Deduplication
+# -------------
+# A single physical device commonly exposes more than one /dev/input/event*
+# node (e.g. a USB receiver bundling a mouse, a keyboard, and a
+# consumer-control interface). Counting event nodes instead of physical
+# devices makes the log lie ("2 external mice detected" for one mouse), even
+# though only ">0" actually drives behavior. Each classified device is
+# deduplicated by a stable per-physical-device key, in this preference order:
+#
+#   1. ID_SERIAL, when present and not the generic udev placeholder
+#      "noserial" (several unrelated internal devices on this machine all
+#      report literally "noserial", so treating that string as a real serial
+#      would wrongly merge distinct devices into one).
+#   2. Otherwise, the parent device's sysfs path: `udevadm info --query=path`
+#      for the event node, with the trailing "/input/inputN/eventM" segment
+#      stripped off. Sibling event nodes of the same physical device (e.g.
+#      event6/7/8 off one USB receiver) share this parent path.
+#   3. Otherwise, "ID_VENDOR_ID:ID_MODEL_ID" as a last resort.
+#
+# Runs standalone, with no arguments, so it can be tested independently of the
+# QML plugin: bin/omarchy-touchpad-auto-count
+
+set -euo pipefail
+
+declare -A seen_keys
+count=0
+
+device_key() {
+  local serial=$1 devpath=$2 vendor=$3 model=$4
+  local parent
+
+  if [[ -n $serial && $serial != "noserial" ]]; then
+    echo "serial:$serial"
+    return
+  fi
+
+  parent=$(sed -E 's#/input/input[0-9]+/event[0-9]+$##' <<<"$devpath")
+  if [[ -n $parent && $parent != "$devpath" ]]; then
+    echo "path:$parent"
+    return
+  fi
+
+  echo "id:${vendor}:${model}"
+}
+
+shopt -s nullglob
+for dev in /dev/input/event*; do
+  [[ -e $dev ]] || continue
+
+  props=$(udevadm info --query=property --name="$dev" 2>/dev/null) || continue
+
+  is_mouse=0
+  is_touchpad=0
+  is_pointingstick=0
+  integration=""
+  serial=""
+  vendor=""
+  model=""
+
+  while IFS='=' read -r key value; do
+    case "$key" in
+      ID_INPUT_MOUSE) is_mouse=$value ;;
+      ID_INPUT_TOUCHPAD) is_touchpad=$value ;;
+      ID_INPUT_POINTINGSTICK) is_pointingstick=$value ;;
+      ID_INPUT_TOUCHPAD_INTEGRATION) integration=$value ;;
+      ID_SERIAL) serial=$value ;;
+      ID_VENDOR_ID) vendor=$value ;;
+      ID_MODEL_ID) model=$value ;;
+    esac
+  done <<<"$props"
+
+  # Never counted, no matter what else the device claims to be.
+  if [[ $is_pointingstick == 1 ]]; then
+    continue
+  fi
+
+  is_external=0
+  if [[ $is_touchpad == 1 ]]; then
+    # Touchpad branch takes priority over the mouse branch below, and only
+    # a positively-classified "external" integration counts. "internal" and
+    # an absent property both fall through as not-external (fail safe).
+    if [[ $integration == "external" ]]; then
+      is_external=1
+    fi
+  elif [[ $is_mouse == 1 ]]; then
+    is_external=1
+  fi
+
+  [[ $is_external == 1 ]] || continue
+
+  devpath=$(udevadm info --query=path --name="$dev" 2>/dev/null) || devpath=""
+  key=$(device_key "$serial" "$devpath" "$vendor" "$model")
+
+  if [[ -z ${seen_keys[$key]:-} ]]; then
+    seen_keys[$key]=1
+    count=$((count + 1))
+  fi
+done
+shopt -u nullglob
+
+echo "$count"

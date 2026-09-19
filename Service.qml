@@ -1,4 +1,5 @@
 import QtQuick
+import Quickshell
 import Quickshell.Io
 import "TouchpadAutoModel.js" as TouchpadAutoModel
 
@@ -15,6 +16,8 @@ Item {
     Qt.resolvedUrl("bin/omarchy-touchpad-auto-count").toString().replace(/^file:\/\//, "")
   readonly property string internalScriptPath:
     Qt.resolvedUrl("bin/omarchy-touchpad-auto-internal").toString().replace(/^file:\/\//, "")
+  readonly property string ownScriptPath:
+    Qt.resolvedUrl("bin/omarchy-touchpad-auto-own").toString().replace(/^file:\/\//, "")
   readonly property string iconPath:
     Qt.resolvedUrl("assets/touchpad.svg").toString().replace(/^file:\/\//, "")
 
@@ -47,6 +50,33 @@ Item {
   // external pointer is unplugged, so the next connection is treated as
   // fresh.
   property bool overrideActive: false
+
+  // ----------------------------------------------------------- ownership
+  //
+  // Whether THIS PLUGIN is the reason the touchpad is currently disabled.
+  // See bin/omarchy-touchpad-auto-own for why it is a file and not just this
+  // property: Omarchy's disable outlives the shell, so ownership has to too.
+  //
+  // Only a disable this plugin caused is a disable this plugin may undo. A
+  // touchpad the user turned off with `omarchy-toggle-input-device touchpad
+  // off` stays off, through pointer connect/disconnect cycles and through
+  // restarts.
+  property bool ownsDisable: false
+  // Set once the marker has been read. The first evaluation waits for it,
+  // because without it the plugin cannot tell a disable of its own from the
+  // user's and would resurrect the user's.
+  property bool ownershipKnown: false
+  // Which ownership call is in flight: "check", "claim", "release" or "path".
+  property string ownPurpose: ""
+  // Published by the helper rather than rebuilt here, so the path exists in
+  // one place only. Needed at unload, when bin/ may already be deleted.
+  property string ownMarkerPath: ""
+  // Raw stdout of the last ownership call, interpreted by handleOwnExit
+  // according to which call it was.
+  property string ownOutput: ""
+  // Remembered across toggleProcess so its exit handler knows whether the
+  // toggle that just finished was the enable that should release ownership.
+  property bool lastToggleEnable: false
 
   property bool countPending: false
   property bool hasPendingToggle: false
@@ -102,27 +132,23 @@ Item {
   }
 
   function applyPointerState(count) {
-    var present = count > 0
-    var wasPresent = root.pointerPresent
-    var isFirstEvaluation = !root.firstEvaluationDone
-    root.firstEvaluationDone = true
-    root.pointerPresent = present
+    var decision = TouchpadAutoModel.decideAction({
+      pointerCount: count,
+      pointerWasPresent: root.pointerPresent,
+      firstEvaluation: !root.firstEvaluationDone,
+      ownsDisable: root.ownsDisable,
+      overrideActive: root.overrideActive
+    })
 
-    if (!isFirstEvaluation && present === wasPresent) {
-      logEvent("no-transition", "pointerPresent=" + present)
+    root.firstEvaluationDone = true
+    root.pointerPresent = count > 0
+    if (decision.clearOverride) root.overrideActive = false
+
+    if (decision.action === "none") {
+      logEvent(decision.reason, "pointerPresent=" + root.pointerPresent)
       return
     }
-
-    if (present) {
-      if (root.overrideActive) {
-        logEvent("skip-disable", "external pointer connected but override active")
-        return
-      }
-      setTouchpad(false)
-    } else {
-      root.overrideActive = false
-      setTouchpad(true)
-    }
+    setTouchpad(decision.action === "enable")
   }
 
   // --------------------------------------------------------- touchpad toggle
@@ -191,13 +217,120 @@ Item {
   }
 
   function runToggle(enable) {
-    if (toggleProcess.running) {
+    if (toggleProcess.running || ownProcess.running) {
       root.pendingToggleEnable = enable
       root.hasPendingToggle = true
       return
     }
+    if (enable) {
+      // Ownership is released after the enable lands, not before: if the
+      // toggle fails, the plugin is still responsible for a touchpad that is
+      // still disabled.
+      runToggleNow(true)
+      return
+    }
+    // The claim has to happen BEFORE the disable. omarchy-toggle-input-device
+    // writes touchpad-disabled-name itself, and the helper reads exactly that
+    // file to tell "already disabled by someone else" from "about to be
+    // disabled by us". Claiming afterwards would always see our own write and
+    // always claim.
+    root.ownPurpose = "claim"
+    ownProcess.command = [root.ownScriptPath, "claim-unless-disabled"]
+    ownProcess.running = true
+  }
+
+  function runToggleNow(enable) {
+    root.lastToggleEnable = enable
     toggleProcess.command = ["omarchy-toggle-input-device", "touchpad", enable ? "on" : "off"]
     toggleProcess.running = true
+  }
+
+  // ------------------------------------------------------------- ownership
+
+  function readOwnership() {
+    // Rewriting command while a call is in flight would corrupt it. Toggling
+    // the plugin off and on again quickly is enough to reach this.
+    if (ownProcess.running) return
+    // The marker path is asked for once and then cached; ownership is asked
+    // for every time, since the user can change it while the plugin is off.
+    runOwn(root.ownMarkerPath === "" ? "path" : "check")
+  }
+
+  function runOwn(purpose) {
+    var argument = purpose === "path" ? "marker-path"
+      : purpose === "claim" ? "claim-unless-disabled"
+      : purpose
+    root.ownPurpose = purpose
+    ownProcess.command = [root.ownScriptPath, argument]
+    ownProcess.running = true
+  }
+
+  function startMonitoring() {
+    if (!root.pluginEnabled) return
+    if (!monitorProcess.running) monitorProcess.running = true
+    root.runCount()
+  }
+
+  function handleOwnExit() {
+    var purpose = root.ownPurpose
+    var output = root.ownOutput
+    root.ownPurpose = ""
+    root.ownOutput = ""
+
+    if (purpose === "path") {
+      root.ownMarkerPath = output
+      runOwn("check")
+      return
+    }
+
+    root.ownsDisable = output === "owned"
+
+    if (purpose === "check") {
+      root.ownershipKnown = true
+      logEvent("ownership", root.ownsDisable
+        ? "this plugin owns the current disable"
+        : "no disable owned by this plugin")
+      // Monitoring only starts once ownership is known, so the very first
+      // evaluation can already tell its own disable from the user's.
+      startMonitoring()
+      return
+    }
+
+    if (purpose === "claim") {
+      logEvent("ownership", root.ownsDisable
+        ? "claimed this disable"
+        : "touchpad was already disabled, leaving that disable to its owner")
+      runToggleNow(false)
+      return
+    }
+
+    if (purpose === "release") logEvent("ownership", "released")
+  }
+
+  // ------------------------------------------------------- stopping cleanly
+  //
+  // The plugin must not walk away holding the touchpad disabled. Omarchy
+  // persists that disable independently of this service's lifetime, so a
+  // plugin that is removed mid-disable leaves a machine with no touchpad and
+  // nothing left running that knows how to bring it back.
+  //
+  // Both commands are system binaries on purpose. `omarchy plugin remove`
+  // deletes the plugin directory, so anything under bin/ here may be gone by
+  // the time this runs; omarchy-toggle-input-device and rm are not.
+  //
+  // execDetached because these have to outlive this object. A regular Process
+  // belongs to the component being torn down and dies with it.
+  //
+  // No identity check here, deliberately. Refusing to act because the two
+  // resolvers disagree is the right call while running, when the cost is one
+  // skipped toggle. At teardown the cost is the user losing their touchpad
+  // with nothing left to fix it, so restoring wins.
+  function restoreOnStop(reason) {
+    if (!root.ownsDisable) return
+    logEvent("restore-on-stop", reason)
+    root.ownsDisable = false
+    Quickshell.execDetached(["omarchy-toggle-input-device", "touchpad", "on"])
+    if (root.ownMarkerPath !== "") Quickshell.execDetached(["rm", "-f", root.ownMarkerPath])
   }
 
   // ------------------------------------------------------------- notifications
@@ -241,6 +374,8 @@ Item {
       debounceMs: root.debounceMs,
       pointerPresent: root.pointerPresent,
       overrideActive: root.overrideActive,
+      ownsDisable: root.ownsDisable,
+      ownershipKnown: root.ownershipKnown,
       monitorRunning: monitorProcess.running,
       lastEvent: root.lastEvent,
       lastEventAt: root.lastEventAt
@@ -252,12 +387,18 @@ Item {
   onPluginEnabledChanged: {
     if (root.pluginEnabled) {
       logEvent("plugin-enabled")
-      if (!monitorProcess.running) monitorProcess.running = true
-      scheduleRecount()
+      // Re-read the marker: while the plugin was off, the user may have
+      // toggled the touchpad themselves, and any ownership held before is
+      // stale.
+      readOwnership()
     } else {
       logEvent("plugin-disabled")
       debounceTimer.stop()
       monitorProcess.running = false
+      // Turning the plugin off must not leave its disable behind. The
+      // service is still loaded here, but restoreOnStop is used anyway so
+      // both stop paths behave identically.
+      restoreOnStop("plugin disabled")
     }
   }
 
@@ -333,10 +474,31 @@ Item {
     onExited: function(exitCode) { root.handleInternalTouchpadExit(exitCode) }
   }
 
+  // Reads and writes the ownership marker. Its stdout is the resulting state,
+  // so root.ownsDisable is always whatever the helper last reported rather
+  // than something this file tries to predict.
+  Process {
+    id: ownProcess
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: root.ownOutput = String(text || "").trim()
+    }
+    onExited: function(exitCode) { root.handleOwnExit() }
+  }
+
   Process {
     id: toggleProcess
     onExited: function(exitCode) {
       root.logEvent("toggle-exit", "exitCode=" + exitCode)
+
+      // Ownership ends when the touchpad is actually back on. A failed enable
+      // leaves it disabled, and leaves this plugin responsible for it.
+      if (exitCode === 0 && root.lastToggleEnable && root.ownsDisable) {
+        root.ownPurpose = "release"
+        ownProcess.command = [root.ownScriptPath, "release"]
+        ownProcess.running = true
+      }
+
       if (root.hasPendingToggle) {
         var enable = root.pendingToggleEnable
         root.hasPendingToggle = false
@@ -354,11 +516,17 @@ Item {
 
   Component.onCompleted: {
     logEvent("service-ready")
-    if (root.pluginEnabled) {
-      monitorProcess.running = true
-      root.runCount()
-    }
+    // readOwnership() starts monitoring once the marker has been read. The
+    // first evaluation must not run before then: it decides whether to
+    // re-enable a touchpad that is disabled right now, and that answer
+    // depends entirely on who disabled it.
+    if (root.pluginEnabled) readOwnership()
   }
+
+  // Covers the shell reloading the plugin, the shell shutting down, and
+  // `omarchy plugin remove`. It does not cover the shell being killed
+  // outright; nothing running inside it can.
+  Component.onDestruction: restoreOnStop("service stopping")
 
   IpcHandler {
     target: "touchpad-auto"

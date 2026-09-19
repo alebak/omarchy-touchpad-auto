@@ -103,6 +103,20 @@ fi
 name=$(<"$name_file")
 [[ -n $name ]] || exit 1
 
-hypr_name=$(tr '[:upper:]' '[:lower:]' <<<"$name" | tr ' ' '-')
+# Mirrors Hyprland's deviceNameToInternalString (src/helpers/MiscFunctions.cpp):
+# every character is lowercased, and space, newline and comma each become '-'.
+# Everything else, slashes included, is left alone.
+#
+# The comma matters. Plenty of USB descriptors read like "Logitech, Inc. ...",
+# and a name normalised differently here can never equal what hyprctl reports.
+# The identity check would then see a permanent mismatch and refuse to toggle
+# anything, for as long as that device is plugged in.
+#
+# LC_ALL=C so the lowercasing does not follow the user's locale. In a Turkish
+# locale, 'I' lowercases to a dotless 'ı', which would not match either.
+hypr_name=$(LC_ALL=C tr '[:upper:]' '[:lower:]' <<<"$name")
+hypr_name=${hypr_name// /-}
+hypr_name=${hypr_name//,/-}
+hypr_name=${hypr_name//$'\n'/-}
 
 echo "$hypr_name"

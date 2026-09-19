@@ -84,9 +84,9 @@ upstream in omarchy#12307. The existing identity check stays as it is.
 
 ## Tasks
 
-- [ ] T1. Add a node-based test runner and cover the current decision logic in
+- [x] T1. Add a node-based test runner and cover the current decision logic in
       `TouchpadAutoModel.js` as a baseline.
-- [ ] T2. Move the enable/disable decision into `TouchpadAutoModel.js` as a pure
+- [x] T2. Move the enable/disable decision into `TouchpadAutoModel.js` as a pure
       function of (pointer count, ownership, first evaluation), with tests written
       first for each case: manual disable preserved, owned disable restored, first
       evaluation with and without the marker, override active.
@@ -124,4 +124,13 @@ Strategy: `single-pr`. Forecast is well under the 400 authored-line budget.
 
 ## Progress
 
-Not started. This document is the PR's problem statement.
+T1 done (`d154403`): `node --test` from the repository root, 4 baseline tests over
+the config helpers. `node --test test/` does not work on node 26, which resolves
+the argument as a module rather than a directory.
+
+T2 done (`8a8cae2`): `decideAction()` in `TouchpadAutoModel.js`, 10 tests written
+first and observed failing, then passing. Not yet wired into `Service.qml`.
+
+Suite: 14 passing, 0 failing.
+
+Next: T3, the `bin/omarchy-touchpad-auto-own` helper.

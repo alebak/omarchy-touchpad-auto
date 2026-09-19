@@ -97,7 +97,7 @@ upstream in omarchy#12307. The existing identity check stays as it is.
       evaluation, claim before disabling, release on enable.
 - [x] T5. Add `Component.onDestruction` restoration via `Quickshell.execDetached()`,
       and restore on the `onPluginEnabledChanged` disable path.
-- [ ] T6. Replace the per-device `udevadm` loops in
+- [x] T6. Replace the per-device `udevadm` loops in
       `bin/omarchy-touchpad-auto-count` and `bin/omarchy-touchpad-auto-internal`
       with a single `udevadm info --export-db` call each.
 - [ ] T7. Document the ownership contract and its known limitation in `README.md`.
@@ -155,4 +155,20 @@ VERIFICATION GAP: qmllint cannot resolve Quickshell's own types (it reports
 against `quickshell-core.qmltypes`, which declares it taking a QString list, and the
 call passes a list of strings. Real proof needs the plugin loaded in the shell.
 
-Next: T6, the `udevadm --export-db` change.
+T6 done (`e77b9f8`): one `udevadm info --export-db` per scan. Measured on the
+affected machine, best of five: `count` 103 ms -> 60 ms, `internal` 112 ms -> 57 ms,
+both returning identical results. The gain is ~1.9x, not the ~4x the raw udevadm
+comparison suggested, because bash startup and parsing dominate what is left. The
+task's own justification is corrected accordingly. Records are filtered on DEVNAME
+matching /dev/input/event*, since the database also carries inputN and mouseN nodes
+that would double-count and create phantom resolver candidates.
+
+Suite: 35 passing, 0 failing.
+
+FOUND, NOT FIXED, out of this task's scope: `omarchy-touchpad-auto-internal`
+normalises the Hyprland name with `tr ' ' '-'` but does not replace commas, which
+Hyprland does. A touchpad whose name contains a comma would resolve to a name that
+never matches, and the identity check would refuse to toggle forever. One line plus
+a test; deliberately left for a separate change.
+
+Next: T7, documenting the ownership contract in `README.md`.

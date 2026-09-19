@@ -186,6 +186,17 @@ it off and the touchpad coming back. That wait belongs to the Bluetooth stack,
 not to this plugin: the debounce here is 400ms, and the recount runs as soon as
 the kernel reports the change. Nothing is stuck.
 
+Measured on the reference machine, switching off an Apple Magic Trackpad:
+
+| | |
+|---|---|
+| Kernel taking the device away | **6598 ms** (measured from several seconds after the switch, so the real figure is higher) |
+| This plugin, recount to touchpad back on | **162 ms** |
+
+The plugin is roughly two percent of the wait you feel. Shortening the rest
+means changing the Bluetooth connection supervision timeout, which is a
+system setting and nothing a plugin can reach.
+
 ## Override
 
 Telling the plugin to back off is reached through `omarchy-shell`'s IPC, so it

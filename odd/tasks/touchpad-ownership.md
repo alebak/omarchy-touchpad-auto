@@ -179,12 +179,33 @@ marked as predating ownership tracking.
 
 All seven tasks complete. Suite: 35 passing, 0 failing. `qmllint`: 0 errors.
 
-REMAINING BEFORE THE LISTING UPDATE:
-1. Install the branch in the shell and verify restore-on-stop live. This is the one
-   acceptance criterion the suite cannot reach.
-2. Verify a user's manual disable survives a pointer connect/disconnect cycle and a
-   shell restart.
-3. Then the marketplace update: the **Plugin verification** issue form, action
+LIVE VERIFICATION DONE (2026-09-19, branch installed in the running shell):
+
+- Claim lands before the toggle: `claimed this disable` at .122, `toggle-exit` at
+  .226.
+- Restore on stop works, through `Component.onDestruction`, the same path
+  `omarchy plugin remove` takes. Before: touchpad off, marker present. After:
+  touchpad on, marker gone. THIS CLOSES THE T5 VERIFICATION GAP:
+  `Quickshell.execDetached()` is proven in a real shell.
+- Claim refuses a user's disable: `touchpad was already disabled, leaving that
+  disable to its owner`, `ownsDisable: false`.
+- The user's disable survives the last pointer disconnecting: 0 pointers,
+  `disable-not-owned`, touchpad stayed off. The old code enabled it here. This is
+  the defect this change exists for, confirmed fixed on hardware.
+
+All four acceptance criteria met.
+
+DISCOVERED DURING THE LIVE TEST:
+- Ownership is cached in memory and re-read only on start or re-enable. Editing the
+  marker by hand while running is not noticed. Documented in README, not defended
+  against, since nothing but the plugin writes it in normal use.
+- `git checkout` of a branch in the installed plugin fires one Quickshell reload per
+  changed file. Twenty in one second left the service not running at all, with the
+  stale instance still owning the IPC target and no error logged. `omarchy restart
+  shell` was required. Hot reload is only reliable for one- or two-file edits.
+
+REMAINING:
+1. the marketplace update: the **Plugin verification** issue form, action
    "Verify and publish a newer upstream commit", plugin ID
    `io.github.alebak.touchpad-auto`, repository URL, and the full 40-character SHA
    of the merged HEAD. Pushing to main without filing it makes the listing show

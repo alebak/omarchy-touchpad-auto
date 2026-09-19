@@ -289,15 +289,30 @@ on that machine:
 It has **not** been tested on any other hardware, or with any other external
 pointer devices.
 
-**Not yet verified on hardware:** ownership tracking and the restore-on-stop
-behaviour described in **Whose disable is it** are covered by the automated
-suite (`node --test`, 35 tests) and the scanners were confirmed to return
-identical results before and after the performance change on the machine
-above. The `Quickshell.execDetached()` call that performs the restore has
-**not** been exercised in a running shell. `qmllint` reports no errors, but
-it cannot resolve Quickshell's own types, so it does not prove that call
-correct. Treat restore-on-removal as implemented and tested in isolation,
-not yet proven live.
+**Ownership tracking, verified live** on the same machine, with the plugin
+loaded in a running shell:
+
+- Connecting a pointer disables the touchpad and records the disable as the
+  plugin's, with the claim landing before the toggle.
+- Stopping the plugin while it holds the disable restores the touchpad and
+  clears the marker. This runs through `Component.onDestruction`, the same
+  path `omarchy plugin remove` takes, so the `Quickshell.execDetached()`
+  restore is proven in a real shell rather than only in tests.
+- A touchpad the user disabled by hand is **not** claimed: the plugin logs
+  "touchpad was already disabled, leaving that disable to its owner".
+- That user disable then survives the last pointer disconnecting. The plugin
+  logs `disable-not-owned` and leaves the touchpad off, where the previous
+  version would have switched it back on.
+
+Backed by the automated suite (`node --test`, 35 tests), and the scanners
+were confirmed to return identical results before and after the performance
+change on the machine above.
+
+**Known gap:** ownership is cached in memory and re-read only when the
+service starts or the plugin is re-enabled. Editing the marker file by hand
+while the plugin runs will not be noticed until then. Nothing but the plugin
+writes that file in normal use, so this is documented rather than defended
+against.
 
 ## License
 

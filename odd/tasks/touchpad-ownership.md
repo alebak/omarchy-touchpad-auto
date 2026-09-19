@@ -93,7 +93,7 @@ upstream in omarchy#12307. The existing identity check stays as it is.
 - [x] T3. Add `bin/omarchy-touchpad-auto-own` with `claim-unless-disabled`,
       `release`, and `check`, reading Omarchy's `touchpad-disabled-name` to decide
       whether a claim is warranted.
-- [ ] T4. Wire ownership into `Service.qml`: read the marker before the first
+- [x] T4. Wire ownership into `Service.qml`: read the marker before the first
       evaluation, claim before disabling, release on enable.
 - [ ] T5. Add `Component.onDestruction` restoration via `Quickshell.execDetached()`,
       and restore on the `onPluginEnabledChanged` disable path.
@@ -137,6 +137,12 @@ failing, then passing. Tested as a process against a throwaway `$HOME`, covering
 claim over a user's pre-existing disable, repeated claim and release, and survival
 across a fresh process. Not yet wired into `Service.qml`.
 
+T4 done (`cd3d01f`): `applyPointerState()` delegates to `decideAction()`; monitoring
+starts only after the marker is read; the claim runs before the disable and the
+release after the enable lands. `qmllint`: 0 errors, and every remaining warning is
+the pre-existing `signal-handler-parameters` class caused by Quickshell types being
+absent from qmllint's import path.
+
 Suite: 22 passing, 0 failing.
 
-Next: T4, wiring ownership into `Service.qml`.
+Next: T5, `Component.onDestruction` restoration.

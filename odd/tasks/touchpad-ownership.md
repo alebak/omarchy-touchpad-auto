@@ -90,7 +90,7 @@ upstream in omarchy#12307. The existing identity check stays as it is.
       function of (pointer count, ownership, first evaluation), with tests written
       first for each case: manual disable preserved, owned disable restored, first
       evaluation with and without the marker, override active.
-- [ ] T3. Add `bin/omarchy-touchpad-auto-own` with `claim-unless-disabled`,
+- [x] T3. Add `bin/omarchy-touchpad-auto-own` with `claim-unless-disabled`,
       `release`, and `check`, reading Omarchy's `touchpad-disabled-name` to decide
       whether a claim is warranted.
 - [ ] T4. Wire ownership into `Service.qml`: read the marker before the first
@@ -131,6 +131,12 @@ the argument as a module rather than a directory.
 T2 done (`8a8cae2`): `decideAction()` in `TouchpadAutoModel.js`, 10 tests written
 first and observed failing, then passing. Not yet wired into `Service.qml`.
 
-Suite: 14 passing, 0 failing.
+T3 done (`7a5c499`): `bin/omarchy-touchpad-auto-own` with
+`claim-unless-disabled`, `release` and `check`. 8 tests written first and observed
+failing, then passing. Tested as a process against a throwaway `$HOME`, covering a
+claim over a user's pre-existing disable, repeated claim and release, and survival
+across a fresh process. Not yet wired into `Service.qml`.
 
-Next: T3, the `bin/omarchy-touchpad-auto-own` helper.
+Suite: 22 passing, 0 failing.
+
+Next: T4, wiring ownership into `Service.qml`.

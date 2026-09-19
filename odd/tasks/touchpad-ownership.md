@@ -95,7 +95,7 @@ upstream in omarchy#12307. The existing identity check stays as it is.
       whether a claim is warranted.
 - [x] T4. Wire ownership into `Service.qml`: read the marker before the first
       evaluation, claim before disabling, release on enable.
-- [ ] T5. Add `Component.onDestruction` restoration via `Quickshell.execDetached()`,
+- [x] T5. Add `Component.onDestruction` restoration via `Quickshell.execDetached()`,
       and restore on the `onPluginEnabledChanged` disable path.
 - [ ] T6. Replace the per-device `udevadm` loops in
       `bin/omarchy-touchpad-auto-count` and `bin/omarchy-touchpad-auto-internal`
@@ -143,6 +143,16 @@ release after the enable lands. `qmllint`: 0 errors, and every remaining warning
 the pre-existing `signal-handler-parameters` class caused by Quickshell types being
 absent from qmllint's import path.
 
-Suite: 22 passing, 0 failing.
+T5 done (`50f0924`): `Component.onDestruction` and the plugin-disabled path both
+call `restoreOnStop()`, which uses `Quickshell.execDetached()` with system binaries
+only. The helper gained `marker-path` so the marker location is not rebuilt in QML.
 
-Next: T5, `Component.onDestruction` restoration.
+Suite: 24 passing, 0 failing. `qmllint`: 0 errors.
+
+VERIFICATION GAP: qmllint cannot resolve Quickshell's own types (it reports
+`QProcess::ExitStatus` as not found), so it does not prove the
+`Quickshell.execDetached()` call is correct at runtime. The signature was checked
+against `quickshell-core.qmltypes`, which declares it taking a QString list, and the
+call passes a list of strings. Real proof needs the plugin loaded in the shell.
+
+Next: T6, the `udevadm --export-db` change.

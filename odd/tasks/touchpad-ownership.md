@@ -100,7 +100,7 @@ upstream in omarchy#12307. The existing identity check stays as it is.
 - [x] T6. Replace the per-device `udevadm` loops in
       `bin/omarchy-touchpad-auto-count` and `bin/omarchy-touchpad-auto-internal`
       with a single `udevadm info --export-db` call each.
-- [ ] T7. Document the ownership contract and its known limitation in `README.md`.
+- [x] T7. Document the ownership contract and its known limitation in `README.md`.
 
 ## Acceptance criteria
 
@@ -171,4 +171,21 @@ Hyprland does. A touchpad whose name contains a comma would resolve to a name th
 never matches, and the identity check would refuse to toggle forever. One line plus
 a test; deliberately left for a separate change.
 
-Next: T7, documenting the ownership contract in `README.md`.
+T7 done (`d824dad`): `README.md` gained a 'Whose disable is it' section with the
+rule, why the marker is a file, the stop behaviour, and the manual recovery for a
+killed shell. The limitation has its own subsection. Status now separates what is
+proven on hardware from what only the suite covers, and the live-test bullet is
+marked as predating ownership tracking.
+
+All seven tasks complete. Suite: 35 passing, 0 failing. `qmllint`: 0 errors.
+
+REMAINING BEFORE THE LISTING UPDATE:
+1. Install the branch in the shell and verify restore-on-stop live. This is the one
+   acceptance criterion the suite cannot reach.
+2. Verify a user's manual disable survives a pointer connect/disconnect cycle and a
+   shell restart.
+3. Then the marketplace update: the **Plugin verification** issue form, action
+   "Verify and publish a newer upstream commit", plugin ID
+   `io.github.alebak.touchpad-auto`, repository URL, and the full 40-character SHA
+   of the merged HEAD. Pushing to main without filing it makes the listing show
+   `Update unverified`.

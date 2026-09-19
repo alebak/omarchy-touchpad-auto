@@ -1,0 +1,89 @@
+#!/bin/bash
+
+# omarchy-touchpad-auto-own
+#
+# Tracks whether THIS PLUGIN is the reason the built-in touchpad is currently
+# disabled, so it only ever re-enables a disable it created itself.
+#
+# Subcommands
+# -----------
+#   claim-unless-disabled   Take ownership, but only if the touchpad is not
+#                           already disabled. Prints "owned" or "unowned".
+#   release                 Drop ownership. Always prints "unowned", exits 0.
+#   check                   Print "owned" (exit 0) or "unowned" (exit 1).
+#
+# Why a file, and not a variable
+# ------------------------------
+# Omarchy persists the touchpad's disabled state to
+# ~/.local/state/omarchy/toggles/hypr/touchpad-disabled-name, and
+# default/hypr/disabled-input-device.lua re-applies it on every reload. The
+# disable therefore survives a shell restart and a reboot. Ownership has to
+# survive exactly as long, or the plugin would forget what it disabled and, on
+# the next start, treat the user's own disable as its own.
+#
+# Why "unless-disabled"
+# ---------------------
+# A disable that was already in place when the plugin went to act is not the
+# plugin's to undo -- the user made it, with their keybinding or with
+# `omarchy-toggle-input-device touchpad off`. Claiming it would let the plugin
+# re-enable a touchpad the user deliberately turned off.
+#
+# Known limitation
+# ----------------
+# This narrows the window; it does not close it. Between reading Omarchy's
+# state file and the toggle actually landing, another writer can change the
+# live state, and nothing here can prove which process caused the transition.
+# Proving it needs a compositor-side compare-and-set that Hyprland does not
+# expose today. Documented rather than hidden.
+#
+# The state paths are built from $HOME rather than $XDG_STATE_HOME, matching
+# what Omarchy's own toggle tools do, so the two agree even when
+# XDG_STATE_HOME points somewhere else.
+
+set -uo pipefail
+
+STATE_DIR="$HOME/.local/state/omarchy/touchpad-auto"
+MARKER="$STATE_DIR/owned-disable"
+OMARCHY_DISABLED_NAME="$HOME/.local/state/omarchy/toggles/hypr/touchpad-disabled-name"
+
+usage() {
+  echo "Usage: $(basename "$0") <claim-unless-disabled|release|check>" >&2
+  exit 2
+}
+
+case "${1-}" in
+  claim-unless-disabled)
+    # Already ours: nothing to do, and re-claiming must not be an error.
+    if [[ -f $MARKER ]]; then
+      echo owned
+      exit 0
+    fi
+    # Someone else already has it disabled, so the disable is not ours.
+    if [[ -f $OMARCHY_DISABLED_NAME ]]; then
+      echo unowned
+      exit 0
+    fi
+    if ! mkdir -p "$STATE_DIR" 2>/dev/null || ! : >"$MARKER" 2>/dev/null; then
+      # Without a durable marker the plugin cannot promise to restore the
+      # touchpad later, so it reports no ownership and leaves it alone.
+      echo unowned
+      exit 1
+    fi
+    echo owned
+    ;;
+  release)
+    rm -f "$MARKER"
+    echo unowned
+    ;;
+  check)
+    if [[ -f $MARKER ]]; then
+      echo owned
+      exit 0
+    fi
+    echo unowned
+    exit 1
+    ;;
+  *)
+    usage
+    ;;
+esac

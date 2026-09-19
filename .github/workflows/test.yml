@@ -1,0 +1,45 @@
+name: Tests
+
+# Runs on every pull request and on main. Without this the suite only runs
+# when someone remembers to run it, which is the same as not having one a few
+# months from now.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Read-only: this workflow inspects the code, it never writes to the
+# repository, publishes anything, or touches the marketplace listing.
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: lts/*
+
+      - name: Unit tests
+        # Must be bare `node --test`, not `node --test test/`: node resolves a
+        # directory argument as a module and fails with MODULE_NOT_FOUND.
+        run: node --test
+
+      - name: Shell syntax
+        run: |
+          for script in bin/*; do
+            bash -n "$script"
+          done
+
+      - name: Helper scripts are executable
+        # The plugin invokes these by path. A checkout that lost the bit would
+        # fail at runtime in the shell, where it is far harder to diagnose.
+        run: |
+          for script in bin/*; do
+            test -x "$script" || { echo "not executable: $script"; exit 1; }
+          done

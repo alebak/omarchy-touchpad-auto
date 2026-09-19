@@ -44,8 +44,11 @@ enabled.
 4. The plugin compares that count against its last known state and acts on
    an actual transition (and, once at startup, applies whatever the current
    state resolves to -- see **Fail-safe by design** below for why):
-   - **A pointer appears:** disables the touchpad.
-   - **The last pointer disappears:** re-enables the touchpad.
+   - **A pointer appears:** disables the touchpad, and records that this
+     disable is its own.
+   - **The last pointer disappears:** re-enables the touchpad, but **only if
+     this plugin is the one that disabled it**. See **Whose disable is it**
+     below.
 5. The plugin raises no notification of its own for either transition. The
    actual toggle is delegated to `omarchy-toggle-input-device`, which already
    shows Omarchy's own OSD ("Touchpad enabled"/"disabled") the moment it
@@ -76,6 +79,62 @@ under `~/.local/state/omarchy/toggles/hypr/touchpad-disabled-name` so it
 survives a Hyprland reload or reboot. This plugin never calls `hyprctl`
 directly.
 
+## Whose disable is it
+
+The plugin only ever re-enables a touchpad **it** turned off.
+
+You have your own way to disable the touchpad: `omarchy-toggle-input-device
+touchpad off`, or whatever key you have bound to it. That disable is yours.
+A plugin that undoes it the next time you unplug a mouse is not being
+helpful, it is overruling you.
+
+So before disabling the touchpad, the plugin asks a question and remembers
+the answer:
+
+| Situation when the plugin goes to disable | What it records | What happens when the last pointer leaves |
+|---|---|---|
+| Touchpad was **on** | the disable is the plugin's | it re-enables the touchpad |
+| Touchpad was **already off** | the disable belongs to you | it leaves the touchpad off |
+
+That record lives in a file, at
+`~/.local/state/omarchy/touchpad-auto/owned-disable`, and not in memory,
+because the thing it describes also outlives the session: Omarchy persists
+the touchpad's disabled state to disk. If ownership were forgotten on every
+restart, the plugin would wake up unable to tell your disable from its own,
+and would go back to overruling you.
+
+**When the plugin stops, it puts the touchpad back.** Disabling the plugin,
+reloading the shell, and `omarchy plugin remove` all restore the touchpad
+first, if the plugin was holding it disabled. Removing this plugin should
+never leave you with a dead touchpad and nothing left running that knows how
+to revive it. The restore runs detached and uses only
+`omarchy-toggle-input-device` and `rm` from `/usr/bin`, precisely because
+removal deletes this plugin's own `bin/` out from under it.
+
+The one case nothing can cover is the shell being killed outright. No
+handler runs then, in this plugin or any other. If that happens, restore it
+yourself:
+
+```bash
+omarchy-toggle-input-device touchpad on
+```
+
+### The limitation, stated plainly
+
+**Ownership is a narrow window, not a proof.**
+
+Between the moment the plugin checks who holds the touchpad and the moment
+its own toggle actually lands, another writer can change the state. Nothing
+here can prove which process caused a given transition. Doing that properly
+needs a compare-and-set on the compositor side, and Hyprland does not expose
+one today.
+
+In practice this means a disable and a manual toggle racing within the same
+fraction of a second can end up attributed to the wrong owner. It narrows a
+defect that used to fire on every single disconnect down to one that needs a
+collision to appear. That is an improvement, not a guarantee, and it is
+written here rather than left for you to discover.
+
 ## Fail-safe by design
 
 Two failure modes get handled deliberately rather than assumed away:
@@ -83,9 +142,11 @@ Two failure modes get handled deliberately rather than assumed away:
 - **Touchpad left disabled across a reboot.** Because the disable persists
   to disk, a machine that reboots with no pointer connected would otherwise
   never get a "transition" to re-enable it -- no mouse at boot looks
-  identical to no mouse a minute ago. The plugin always applies the resolved
-  state once at startup, whether or not anything changed, specifically to
-  recover from this.
+  identical to no mouse a minute ago. The plugin applies the resolved state
+  once at startup, whether or not anything changed, specifically to recover
+  from this. It waits to read the ownership marker before doing so: at that
+  exact moment it is deciding whether to re-enable a touchpad that is
+  disabled right now, and that answer depends entirely on who disabled it.
 - **Ambiguous touchpad identity.** Omarchy's own resolver,
   `omarchy-hw-touchpad`, picks the first device whose name matches
   `touchpad|trackpad` -- and with an external trackpad connected, that can
@@ -199,6 +260,9 @@ Add a `touchpadAuto` section to `~/.config/omarchy/shell.json`:
 omarchy plugin remove io.github.alebak.touchpad-auto
 ```
 
+If the plugin was holding your touchpad disabled at the time, it turns it
+back on before it goes. See **Whose disable is it** above.
+
 ## Status
 
 This is a **prototype**, built to be offered upstream as a contribution to
@@ -216,12 +280,24 @@ on that machine:
   Trackpad both connected; the TrackPoint and the built-in touchpad are
   correctly excluded).
 - Disconnecting the last external pointer re-enables the touchpad, and
-  reconnecting one disables it again.
+  reconnecting one disables it again. This was verified before ownership
+  tracking existed, so it covers the case where the plugin owns the disable,
+  which is the case that test created.
 - The identity-mismatch fail-safe triggered for real: `omarchy-hw-touchpad`
   named the external trackpad, and the plugin correctly refused to toggle.
 
 It has **not** been tested on any other hardware, or with any other external
 pointer devices.
+
+**Not yet verified on hardware:** ownership tracking and the restore-on-stop
+behaviour described in **Whose disable is it** are covered by the automated
+suite (`node --test`, 35 tests) and the scanners were confirmed to return
+identical results before and after the performance change on the machine
+above. The `Quickshell.execDetached()` call that performs the restore has
+**not** been exercised in a running shell. `qmllint` reports no errors, but
+it cannot resolve Quickshell's own types, so it does not prove that call
+correct. Treat restore-on-removal as implemented and tested in isolation,
+not yet proven live.
 
 ## License
 

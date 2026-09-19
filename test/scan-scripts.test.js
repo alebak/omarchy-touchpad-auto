@@ -123,6 +123,29 @@ test("resolves the built-in touchpad to its Hyprland name", () => {
   })
 })
 
+test("normalises the device name exactly the way Hyprland does", () => {
+  // Hyprland's deviceNameToInternalString (src/helpers/MiscFunctions.cpp)
+  // lowercases every character and maps space, newline and comma to '-'.
+  // Everything else, slashes included, is left alone. A name this resolver
+  // normalises differently can never match what hyprctl reports, and the
+  // identity check would then refuse to toggle forever.
+  const cases = [
+    ["SynPS/2 Synaptics TouchPad", "synps/2-synaptics-touchpad"],
+    ["Logitech, Inc. Trackpad", "logitech--inc.-trackpad"],
+    ["ACME,Pad", "acme-pad"],
+    ["UPPER case MIXED", "upper-case-mixed"],
+    ["Keeps-hyphens_and.dots", "keeps-hyphens_and.dots"]
+  ]
+
+  for (const [raw, expected] of cases) {
+    withFixture([eventDevice(17, INTERNAL_PAD)], (t) => {
+      const result = t.run(INTERNAL, { OMARCHY_INPUT_CLASS_PATH: t.sysfs(17, raw) })
+      assert.equal(result.code, 0, `${raw} should resolve`)
+      assert.equal(result.stdout, expected, `normalising ${JSON.stringify(raw)}`)
+    })
+  }
+})
+
 test("refuses to guess when no internal touchpad exists", () => {
   withFixture([eventDevice(19, EXTERNAL_PAD)], (t) => {
     const result = t.run(INTERNAL, { OMARCHY_INPUT_CLASS_PATH: t.sysfs(19, "Apple Wireless Trackpad") })

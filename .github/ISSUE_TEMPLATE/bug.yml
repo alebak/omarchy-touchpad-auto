@@ -1,0 +1,43 @@
+name: Bug report
+description: The plugin did something other than what it says it does.
+labels: [bug]
+body:
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you did, and what the plugin did instead of what you expected.
+    validations:
+      required: true
+
+  - type: textarea
+    id: state
+    attributes:
+      label: Plugin state
+      description: Output of the status call and the recent log lines. Both are read-only.
+      value: |
+        ```console
+        $ omarchy-shell touchpad-auto status
+
+        $ journalctl --user -b | rg touchpad-auto | tail -20
+
+        ```
+    validations:
+      required: false
+
+  - type: textarea
+    id: pointers
+    attributes:
+      label: Pointing devices involved
+      description: Built-in touchpad, and any external mouse or trackpad, with how each one connects.
+      placeholder: Built-in Synaptics PS/2 clickpad, Apple Magic Trackpad over Bluetooth
+    validations:
+      required: true
+
+  - type: input
+    id: versions
+    attributes:
+      label: Omarchy and Hyprland versions
+      placeholder: Omarchy 4.0.3, Hyprland 0.56.2
+    validations:
+      required: true

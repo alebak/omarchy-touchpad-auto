@@ -1,0 +1,54 @@
+name: PR checks
+
+# Every pull request must point at an issue. Commits record how something
+# changed; the issue records why it was worth changing, and it is the thing a
+# user can search, subscribe to and comment on without reading a diff.
+
+on:
+  pull_request:
+    # `edited` and the label events matter: both the body and the escape-hatch
+    # label can change after the PR is opened, and the check has to re-run.
+    types: [opened, edited, reopened, synchronize, labeled, unlabeled]
+
+permissions:
+  contents: read
+  issues: read
+
+jobs:
+  issue-link:
+    name: issue link
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require a linked issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          BODY: ${{ github.event.pull_request.body }}
+          LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
+        run: |
+          set -euo pipefail
+
+          # Escape hatch. When something is broken in front of users, filing
+          # paperwork first is the wrong order. Label the PR `no-issue` and
+          # this check stands down.
+          if grep -qx 'no-issue' <<<"${LABELS//,/$'\n'}"; then
+            echo "Skipped: this PR carries the no-issue label."
+            exit 0
+          fi
+
+          number=$(grep -oiE '(closes|fixes|resolves|refs)[[:space:]]+#[0-9]+' <<<"$BODY" \
+            | grep -oE '[0-9]+' | head -1 || true)
+
+          if [[ -z $number ]]; then
+            echo "::error::No issue referenced. Add 'Closes #N' (or Fixes, Resolves, Refs) to the pull request body, or apply the no-issue label if this cannot wait for an issue."
+            exit 1
+          fi
+
+          # A reference to an issue that does not exist is a typo, and a typo
+          # that passes silently is worse than no check at all.
+          if ! gh issue view "$number" --repo "$REPO" --json number >/dev/null 2>&1; then
+            echo "::error::This pull request references #$number, which does not exist in $REPO."
+            exit 1
+          fi
+
+          echo "Linked to issue #$number."

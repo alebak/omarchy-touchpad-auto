@@ -1,0 +1,26 @@
+name: Change or improvement
+description: Something to add, change or remove. Also the issue to open before your own pull request.
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What
+      description: The change itself, in a sentence or two.
+    validations:
+      required: true
+
+  - type: textarea
+    id: why
+    attributes:
+      label: Why
+      description: The reasoning a diff cannot carry. What goes wrong today, or what becomes possible.
+    validations:
+      required: true
+
+  - type: textarea
+    id: out-of-scope
+    attributes:
+      label: Deliberately out of scope
+      description: What this is NOT going to do. Saying so up front prevents the work from growing quietly.
+    validations:
+      required: false

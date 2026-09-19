@@ -11,6 +11,11 @@
 #                           already disabled. Prints "owned" or "unowned".
 #   release                 Drop ownership. Always prints "unowned", exits 0.
 #   check                   Print "owned" (exit 0) or "unowned" (exit 1).
+#   marker-path             Print the marker's path. Service.qml needs it to
+#                           clean up on unload, when this script may already
+#                           have been deleted along with the plugin directory.
+#                           Publishing it keeps one source of truth rather
+#                           than the same path written in two files.
 #
 # Why a file, and not a variable
 # ------------------------------
@@ -47,7 +52,7 @@ MARKER="$STATE_DIR/owned-disable"
 OMARCHY_DISABLED_NAME="$HOME/.local/state/omarchy/toggles/hypr/touchpad-disabled-name"
 
 usage() {
-  echo "Usage: $(basename "$0") <claim-unless-disabled|release|check>" >&2
+  echo "Usage: $(basename "$0") <claim-unless-disabled|release|check|marker-path>" >&2
   exit 2
 }
 
@@ -82,6 +87,10 @@ case "${1-}" in
     fi
     echo unowned
     exit 1
+    ;;
+  marker-path)
+    # Deliberately does not create anything: this is a question, not a claim.
+    printf '%s\n' "$MARKER"
     ;;
   *)
     usage

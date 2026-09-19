@@ -1,4 +1,5 @@
 import QtQuick
+import Quickshell
 import Quickshell.Io
 import "TouchpadAutoModel.js" as TouchpadAutoModel
 
@@ -65,8 +66,14 @@ Item {
   // because without it the plugin cannot tell a disable of its own from the
   // user's and would resurrect the user's.
   property bool ownershipKnown: false
-  // Which ownership call is in flight: "check", "claim" or "release".
+  // Which ownership call is in flight: "check", "claim", "release" or "path".
   property string ownPurpose: ""
+  // Published by the helper rather than rebuilt here, so the path exists in
+  // one place only. Needed at unload, when bin/ may already be deleted.
+  property string ownMarkerPath: ""
+  // Raw stdout of the last ownership call, interpreted by handleOwnExit
+  // according to which call it was.
+  property string ownOutput: ""
   // Remembered across toggleProcess so its exit handler knows whether the
   // toggle that just finished was the enable that should release ownership.
   property bool lastToggleEnable: false
@@ -244,8 +251,17 @@ Item {
     // Rewriting command while a call is in flight would corrupt it. Toggling
     // the plugin off and on again quickly is enough to reach this.
     if (ownProcess.running) return
-    root.ownPurpose = "check"
-    ownProcess.command = [root.ownScriptPath, "check"]
+    // The marker path is asked for once and then cached; ownership is asked
+    // for every time, since the user can change it while the plugin is off.
+    runOwn(root.ownMarkerPath === "" ? "path" : "check")
+  }
+
+  function runOwn(purpose) {
+    var argument = purpose === "path" ? "marker-path"
+      : purpose === "claim" ? "claim-unless-disabled"
+      : purpose
+    root.ownPurpose = purpose
+    ownProcess.command = [root.ownScriptPath, argument]
     ownProcess.running = true
   }
 
@@ -257,7 +273,17 @@ Item {
 
   function handleOwnExit() {
     var purpose = root.ownPurpose
+    var output = root.ownOutput
     root.ownPurpose = ""
+    root.ownOutput = ""
+
+    if (purpose === "path") {
+      root.ownMarkerPath = output
+      runOwn("check")
+      return
+    }
+
+    root.ownsDisable = output === "owned"
 
     if (purpose === "check") {
       root.ownershipKnown = true
@@ -279,6 +305,32 @@ Item {
     }
 
     if (purpose === "release") logEvent("ownership", "released")
+  }
+
+  // ------------------------------------------------------- stopping cleanly
+  //
+  // The plugin must not walk away holding the touchpad disabled. Omarchy
+  // persists that disable independently of this service's lifetime, so a
+  // plugin that is removed mid-disable leaves a machine with no touchpad and
+  // nothing left running that knows how to bring it back.
+  //
+  // Both commands are system binaries on purpose. `omarchy plugin remove`
+  // deletes the plugin directory, so anything under bin/ here may be gone by
+  // the time this runs; omarchy-toggle-input-device and rm are not.
+  //
+  // execDetached because these have to outlive this object. A regular Process
+  // belongs to the component being torn down and dies with it.
+  //
+  // No identity check here, deliberately. Refusing to act because the two
+  // resolvers disagree is the right call while running, when the cost is one
+  // skipped toggle. At teardown the cost is the user losing their touchpad
+  // with nothing left to fix it, so restoring wins.
+  function restoreOnStop(reason) {
+    if (!root.ownsDisable) return
+    logEvent("restore-on-stop", reason)
+    root.ownsDisable = false
+    Quickshell.execDetached(["omarchy-toggle-input-device", "touchpad", "on"])
+    if (root.ownMarkerPath !== "") Quickshell.execDetached(["rm", "-f", root.ownMarkerPath])
   }
 
   // ------------------------------------------------------------- notifications
@@ -343,6 +395,10 @@ Item {
       logEvent("plugin-disabled")
       debounceTimer.stop()
       monitorProcess.running = false
+      // Turning the plugin off must not leave its disable behind. The
+      // service is still loaded here, but restoreOnStop is used anyway so
+      // both stop paths behave identically.
+      restoreOnStop("plugin disabled")
     }
   }
 
@@ -425,7 +481,7 @@ Item {
     id: ownProcess
     stdout: StdioCollector {
       waitForEnd: true
-      onStreamFinished: root.ownsDisable = String(text || "").trim() === "owned"
+      onStreamFinished: root.ownOutput = String(text || "").trim()
     }
     onExited: function(exitCode) { root.handleOwnExit() }
   }
@@ -466,6 +522,11 @@ Item {
     // depends entirely on who disabled it.
     if (root.pluginEnabled) readOwnership()
   }
+
+  // Covers the shell reloading the plugin, the shell shutting down, and
+  // `omarchy plugin remove`. It does not cover the shell being killed
+  // outright; nothing running inside it can.
+  Component.onDestruction: restoreOnStop("service stopping")
 
   IpcHandler {
     target: "touchpad-auto"

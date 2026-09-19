@@ -105,6 +105,28 @@ test("ownership survives a fresh process, which is the point of a file", () => {
   })
 })
 
+test("marker-path publishes the marker location so nothing has to hardcode it", () => {
+  // Service.qml needs this path to clean up on unload, when the plugin's own
+  // bin/ may already have been deleted. Asking the helper keeps one source of
+  // truth instead of the same path written in two files that drift apart.
+  withHome((paths) => {
+    const result = run(paths.home, "marker-path")
+    assert.equal(result.code, 0)
+    assert.equal(result.stdout, paths.marker)
+
+    // And it is the path actually used, not a plausible-looking string.
+    run(paths.home, "claim-unless-disabled")
+    assert.ok(fs.existsSync(result.stdout), "the published path is the one claimed")
+  })
+})
+
+test("marker-path works before the state directory exists", () => {
+  withHome((paths) => {
+    assert.ok(!fs.existsSync(path.dirname(paths.marker)))
+    assert.equal(run(paths.home, "marker-path").code, 0)
+  })
+})
+
 test("an unknown subcommand fails loudly instead of doing nothing", () => {
   withHome((paths) => {
     const result = run(paths.home, "wat")
